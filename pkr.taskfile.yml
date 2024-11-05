@@ -1,0 +1,77 @@
+version: '3'
+
+vars:
+  PACKER_LOG: 1
+  PACKER_CACHE_DIR: '{{.USER_WORKING_DIR}}/.packer_cache'
+  DEFAULT_VAR_FILE: values.pkvars.hcl
+  ARTIFACTORY_URL: '{{.ARTIFACTORY_URL | default ""}}'
+  ARTIFACTORY_USERNAME: '{{.ARTIFACTORY_USERNAME}}'
+  ARTIFACTORY_PASSWORD: '{{.ARTIFACTORY_PASSWORD}}'
+
+tasks:
+  default:
+    cmds:
+      - task: help
+
+  help:
+    desc: Display available tasks
+    cmds:
+      - |
+        echo "Available tasks:"
+        echo "  task init              # Initialize Packer working directory"
+        echo "  task validate          # Validate Packer templates"
+        echo "  task build            # Build all images"
+        echo "  task build:docker     # Build only Docker image"
+        echo "  task build:docker-push # Build and push Docker image"
+        echo "  task build:aws        # Build only AWS AMI"
+        echo "  task build:azure      # Build only Azure image"
+        echo "  task clean            # Clean Packer cache"
+        echo ""
+        echo "Environment specific builds:"
+        echo "  task build:dev        # Build with development variables"
+        echo "  task build:staging    # Build with staging variables"
+        echo "  task build:prod       # Build with production variables"
+        echo ""
+        echo "Use PACKER_LOG=1 for detailed logging"
+
+  init:
+    desc: Initialize Packer working directory
+    cmds:
+      - packer init main.pkr.hcl
+      - mkdir -p {{.PACKER_CACHE_DIR}}
+
+  check-artifactory:
+    internal: true
+    cmds:
+      - |
+        if [ -z "$ARTIFACTORY_USERNAME" ] || [ -z "$ARTIFACTORY_PASSWORD" ]; then
+          echo "Artifactory credentials not set"
+          exit 1
+        fi
+        curl -u $ARTIFACTORY_USERNAME:$ARTIFACTORY_PASSWORD $ARTIFACTORY_URL/api/system/ping
+
+  validate:
+    desc: Validate Packer templates
+    deps: [check-artifactory]
+    cmds:
+      - |
+        packer validate \
+          -var="artifactory_url=${ARTIFACTORY_URL}" \
+          -var="artifactory_username=${ARTIFACTORY_USERNAME}" \
+          -var="artifactory_password=${ARTIFACTORY_PASSWORD}" \
+          -var-file={{.DEFAULT_VAR_FILE}} \
+          main.pkr.hcl
+    sources:
+      - php_node_multi_image_builder.pkr.hcl
+      - variables.pkr.hcl
+      - '*.pkrvars.hcl'
+
+  fmt:
+    desc: Format Packer templates
+    cmds:
+      - packer fmt php_node_multi_image_builder.pkr.hcl
+      - packer fmt variables.pkr.hcl
+      - packer fmt *.pkrvars.hcl
+
+  clean:
+    desc: Clean P
